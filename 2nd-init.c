@@ -2,6 +2,9 @@
 Copyright (C) 2010-2011 Skrilax_CZ (skrilax@gmail.com)
 Using work done by Pradeep Padala (ptrace functions) (p_padala@yahoo.com)
 
+Changes : Project Lense BMM (@whirleyes)
+- add support for building 2nd-init as library (for multi-call binary)
+
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
 as published by the Free Software Foundation; either version 2
@@ -99,6 +102,7 @@ unsigned long get_free_address(pid_t pid)
   char line[85];
   char str[20];
   unsigned long addr;
+  unsigned long end_address;
   sprintf(filename, "/proc/%d/maps", pid);
   fp = fopen(filename, "r");
   
@@ -107,8 +111,8 @@ unsigned long get_free_address(pid_t pid)
 		
   while(fgets(line, 85, fp) != NULL) 
   {
-    sscanf(line, "%lx-%*lx %s %s %s", &addr, 
-    	str, str, str, str);
+    sscanf(line, "%lx-%lx %s %s %s", &addr, 
+    	&end_address, str, str, str);
     	
 		if(strcmp(str, "00:00") == 0)
 			break;
@@ -151,8 +155,20 @@ void get_base_image_data(pid_t pid, unsigned long* address, unsigned long* size)
 }
 
 /* Main */
-int main(int argc, char** argv)
-{
+#ifdef LIBRARY_VERSION
+int second_init(int argc, char** argv) {
+	klog_init();
+	klog_set_level(6);
+	
+	int b4 = getCPU(1);
+	INFO("Get CPU affinity: init %d\n", b4);
+	INFO("Set CPU affinity...\n");
+	setCPU(0,1);
+	setCPU(1,1);
+	INFO("Get CPU affinity: init %d, 2nd-init %d\n", getCPU(1), getCPU(0));
+#else
+int main(int argc, char** argv) {
+#endif
 	struct pt_regs regs;
 	
 	char buff[512];
@@ -177,7 +193,7 @@ int main(int argc, char** argv)
 	
 	if (f == 0)
 	{
-		printf("Couldn't read /init enviromental variables.\n");
+		ERROR("Couldn't read /init enviromental variables.\n");
 		return 2;
 	}
 	
@@ -196,7 +212,7 @@ int main(int argc, char** argv)
 		
 	/* Obtain an address */
 	injected_data_address = get_free_address(1);
-	printf("Address for data injection: 0x%08lX.\n", injected_data_address);
+	INFO("Address for data injection: 0x%08lX.\n", injected_data_address);
 	
 	/* Reset */
 	memset(injected_data, 0, sizeof(injected_data));
@@ -210,12 +226,12 @@ int main(int argc, char** argv)
 	
 	if (image_base == 0 || image_size == 0)
 	{
-		printf("Error, couldn't get the image base of /init.\n");
+		ERROR("Error, couldn't get the image base of /init.\n");
 		return 1;
 	}
 	
-	printf("image_base: 0x%08lX.\n", image_base);
-	printf("image_size: 0x%08lX.\n", image_size);
+	INFO("image_base: 0x%08lX.\n", image_base);
+	INFO("image_size: 0x%08lX.\n", image_size);
 	
 	init_image = malloc(image_size);
 	get_data(1, image_base, init_image, image_size);
@@ -248,11 +264,11 @@ int main(int argc, char** argv)
 	
 	if (!execve_address)
 	{
-		printf("Failed locating execve.\n");
+		ERROR("Failed locating execve.\n");
 		return 5;
 	}
 	
-	printf("execve located on: 0x%08lX.\n", execve_address);
+	INFO("execve located on: 0x%08lX.\n", execve_address);
 	
 	/* Fill in data:
 	 *
@@ -312,13 +328,18 @@ int main(int argc, char** argv)
 	regs.ARM_r2 = injected_data_address + 0x0008; /* char** envp */
 	regs.ARM_pc = execve_address;
 	
-	printf("Setting /init PC to: 0x%08lX.\n", execve_address);
+	NOTICE("Setting /init PC to: 0x%08lX.\n", execve_address);
 	
 	ptrace(PTRACE_SETREGS, 1, NULL, &regs);
 
   /* Detach */
-	printf("Detaching...\n");
+	INFO("Detaching...\n");
 	ptrace(PTRACE_DETACH, 1, NULL, NULL);
+#ifdef LIBRARY_VERSION
+	INFO("Unset CPU affinity...\n");
+	setCPU(1,b4);
+	INFO("Get CPU affinity: init %d\n", getCPU(1));
+#endif
 	return 0;
 }
 

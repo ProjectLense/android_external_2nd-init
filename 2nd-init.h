@@ -21,6 +21,18 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #ifndef SECOND_INIT_H
 #define SECOND_INIT_H
 
+#ifdef LIBRARY_VERSION
+#include <cutils/klog.h>
+#include "../bootmenu/bootmenu_lib.h"
+
+#define ERROR(x...)   KLOG_ERROR("2nd-init", x)
+#define NOTICE(x...)  KLOG_NOTICE("2nd-init", x)
+#define INFO(x...)    KLOG_INFO("2nd-init", x)
+#else
+#define ERROR(x...)   printf(x)
+#define NOTICE(x...)  printf(x)
+#define INFO(x...)    printf(x)
+#endif
 /*===============================================================================
  * 
  * Signature of calling execve (syscall 11)
@@ -36,8 +48,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 ===============================================================================*/
 	 
 char execve_code[] = {	0x90, 0x00, 0x2D, 0xE9,
-												0x0B, 0x70, 0xA0, 0xE3,
-												0x00, 0x00, 0x00, 0xEF,
-												0x90, 0x00, 0xBD, 0xE8 };
+						0x0B, 0x70, 0xA0, 0xE3,
+						0x00, 0x00, 0x00, 0xEF,
+						0x90, 0x00, 0xBD, 0xE8 };
 												
 #endif //!SECOND_INIT_H
