@@ -161,7 +161,7 @@ int second_init(int argc, char** argv) {
 	klog_set_level(6);
 	
 	int b4 = getCPU(1);
-	INFO("Get CPU affinity: init %d\n", b4);
+	INFO("Get CPU affinity: init %d, 2nd-init %d\n", b4, getCPU(0));
 	INFO("Set CPU affinity...\n");
 	setCPU(0,1);
 	setCPU(1,1);

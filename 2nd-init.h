@@ -23,7 +23,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #ifdef LIBRARY_VERSION
 #include <cutils/klog.h>
-#include "../bootmenu/bootmenu_lib.h"
+#include "../bmm/library.h"
 
 #define ERROR(x...)   KLOG_ERROR("2nd-init", x)
 #define NOTICE(x...)  KLOG_NOTICE("2nd-init", x)
