@@ -154,8 +154,34 @@ void get_base_image_data(pid_t pid, unsigned long* address, unsigned long* size)
   fclose(fp);
 }
 
-/* Main */
 #ifdef LIBRARY_VERSION
+#define _GNU_SOURCE
+#include <getopt.h>
+#include <sched.h>
+
+int setCPU(int pid, int totalcpu) {
+	cpu_set_t mask;
+	CPU_ZERO(&mask);
+	int i;
+	for(i=0; i<totalcpu; i++) {
+		CPU_SET(i, &mask);
+	}
+	return sched_setaffinity(pid, sizeof(mask), &mask);
+}
+
+int getCPU(int pid) {
+	cpu_set_t mask;
+	sched_getaffinity(pid, sizeof(mask), &mask);
+	pid = 0;
+	int i;
+	for(i=0; i<CPU_SETSIZE; i++) {
+		if(CPU_ISSET(i,&mask)) {
+			pid++;
+		}
+	}
+	return pid;
+}
+
 int second_init(int argc, char** argv) {
 	klog_init();
 	klog_set_level(6);
@@ -167,6 +193,7 @@ int second_init(int argc, char** argv) {
 	setCPU(1,1);
 	INFO("Get CPU affinity: init %d, 2nd-init %d\n", getCPU(1), getCPU(0));
 #else
+/* Main */
 int main(int argc, char** argv) {
 #endif
 	struct pt_regs regs;
