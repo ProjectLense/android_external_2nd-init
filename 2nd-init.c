@@ -4,6 +4,7 @@ Using work done by Pradeep Padala (ptrace functions) (p_padala@yahoo.com)
 
 Changes : Project Lense BMM (@whirleyes)
 - add support for building 2nd-init as library (for multi-call binary)
+- add propex function (hijack android property service)
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -123,12 +124,12 @@ unsigned long get_free_address(pid_t pid)
 }
 
 /* Gets image base data */
-void get_base_image_data(pid_t pid, unsigned long* address, unsigned long* size)
+void get_base_image_data(pid_t pid, unsigned long* address, unsigned long* size, const char* name)
 {
 	FILE *fp;
   char filename[30];
   char line[85];
-  char str[20];
+  char str[85];
   
   *address = 0;
 	*size = 0;
@@ -142,13 +143,12 @@ void get_base_image_data(pid_t pid, unsigned long* address, unsigned long* size)
   if(fp == NULL)
 		exit(1);
 		
-  if(fgets(line, 85, fp) != NULL) 
-  {
-    sscanf(line, "%lx-%lx %s %s %s", &start_address, 
-    	&end_address, str, str, str);
-    	
-    *address = start_address;
-    *size = end_address - start_address;
+  while(fgets(line, 85, fp) != (char *)NULL) {
+	if ((sscanf(line, "%lx-%lx %84[^/]/%s", &start_address, &end_address, str, str) == 4) && (!strcmp(str, name))) {
+		*address = start_address;
+		*size = end_address - start_address;
+		break;
+	}
   }
   
   fclose(fp);
@@ -158,7 +158,50 @@ void get_base_image_data(pid_t pid, unsigned long* address, unsigned long* size)
 #define _GNU_SOURCE
 #include <getopt.h>
 #include <sched.h>
+#include <cutils/properties.h>
+#define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
+#include <sys/_system_properties.h>
 
+extern struct prop_area *__system_property_area__;
+
+/* Set ro.* property - based on goroh_kun's propex idea*/
+int propex_main(int argc, char** argv) {
+	argc--;
+	argv++;
+
+	int namelen = strlen(argv[1]);
+    int valuelen = strlen(argv[2]);
+
+    if(namelen >= PROP_NAME_MAX) return -1;
+    if(valuelen >= PROP_VALUE_MAX) return -1;
+    if(namelen < 1) return -1;
+
+	char* prop_image;
+	unsigned long image_base;
+	unsigned long image_size;
+
+	ptrace(PTRACE_ATTACH, 1, NULL, NULL);
+	wait(NULL);
+
+	get_base_image_data(1, &image_base, &image_size, "dev/__properties__");
+	prop_image = malloc(image_size);
+	get_data(1, image_base, prop_image, image_size);
+
+	__system_property_area__ = (prop_area *) prop_image;
+    prop_info *pi = (prop_info*) __system_property_find(argv[1]);
+
+    if (pi != 0) {
+		pi->serial = pi->serial | 1;
+		memcpy(pi->value, argv[2], valuelen + 1);
+		pi->serial = (valuelen << 24) | ((pi->serial + 1) & 0xffffff);
+		put_data(1, image_base + (char*) pi - prop_image, (char*) pi, (int) sizeof(*pi));
+    }
+
+	free(prop_image);
+	ptrace(PTRACE_DETACH, 1, NULL, NULL);
+	return 0;
+}
+/* Set CPU affinity */
 int setCPU(int pid, int totalcpu) {
 	cpu_set_t mask;
 	CPU_ZERO(&mask);
@@ -168,7 +211,7 @@ int setCPU(int pid, int totalcpu) {
 	}
 	return sched_setaffinity(pid, sizeof(mask), &mask);
 }
-
+/* Get CPU affinity */
 int getCPU(int pid) {
 	cpu_set_t mask;
 	sched_getaffinity(pid, sizeof(mask), &mask);
@@ -181,7 +224,7 @@ int getCPU(int pid) {
 	}
 	return pid;
 }
-
+/* library call*/
 int second_init(int argc, char** argv) {
 	klog_init();
 	klog_set_level(6);
@@ -249,7 +292,7 @@ int main(int argc, char** argv) {
 	 */
 	
   /* Get image data */
- 	get_base_image_data(1, &image_base, &image_size);
+ 	get_base_image_data(1, &image_base, &image_size, "init");
 	
 	if (image_base == 0 || image_size == 0)
 	{
